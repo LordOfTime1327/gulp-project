@@ -1,4 +1,4 @@
-// Импорт пакетов
+// packages import
 const gulp = require('gulp')
 const sass = require('gulp-sass')(require('sass'))
 const rename = require('gulp-rename')
@@ -12,8 +12,10 @@ const imagemin = require('gulp-imagemin')
 const newer = require('gulp-newer')
 const browsersync = require('browser-sync').create()
 const del = require('del')
+const uglifyES = require('gulp-uglify-es').default
+const webpackStream = require('webpack-stream')
 
-// Пути исходных файлов src и пути к результирующим файлам dest
+// Pathes to src files and pathes to dist files
 const paths = {
   styles: {
     src: ['src/scss/**/*.scss'],
@@ -29,12 +31,12 @@ const paths = {
   }
 }
 
-// Очистить каталог dist, удалить все кроме изображений
+// Clear dist folder, except images
 function clean() {
   return del(['dist/*', '!dist/img'])
 }
 
-// Обработка препроцессоров стилей
+// Processing css preprocessors
 function styles() {
   return gulp.src(paths.styles.src)
   .pipe(sourcemaps.init())
@@ -54,21 +56,36 @@ function styles() {
   .pipe(browsersync.stream())
 }
 
-// Обработка Java Script, Type Script и Coffee Script
+// Processing JS
 function scripts() {
   return gulp.src(paths.scripts.src)
-  .pipe(sourcemaps.init())
-  .pipe(babel({
-    presets: ['@babel/env']
-  }))
-  .pipe(uglify())
-  .pipe(concat('script.min.js'))
-  .pipe(sourcemaps.write('.'))
-  .pipe(gulp.dest(paths.scripts.dest))
-  .pipe(browsersync.stream())
-}
+    .pipe(webpackStream({
+      mode: 'none',
+      output: {
+        filename: 'script.js',
+      },
+      module: {
+        rules: [
+          {
+            test: /\.m?js$/,
+            exclude: /node_modules/,
+            use: {
+              loader: 'babel-loader',
+              options: {
+                presets: [
+                  ['@babel/preset-env', {targets: "defaults"}]
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }))
+    .pipe(uglifyES())
+    .pipe(gulp.dest(paths.scripts.dest))
+};
 
-// Сжатие изображений
+// Image compression
 function img() {
   return gulp.src(paths.images.src)
   .pipe(newer(paths.images.dest))
@@ -78,7 +95,7 @@ function img() {
   .pipe(gulp.dest(paths.images.dest))
 }
 
-// Отслеживание изменений в файлах и запуск лайв сервера
+// Tracking changes in files and running live server
 function watch() {
   browsersync.init({
     server: {
@@ -86,18 +103,19 @@ function watch() {
     }
   })
   gulp.watch('./*.html').on('change', browsersync.reload)
+  // gulp.watch('./**/*.js').on('change', browsersync.reload)
   gulp.watch(paths.styles.src, styles)
-  gulp.watch(paths.scripts.src, scripts)
+  gulp.watch(paths.scripts.src, scripts).on('change', browsersync.reload)
   gulp.watch(paths.images.src, img)
 }
 
-// Таски для ручного запуска с помощью gulp clean, gulp html и т.д.
+// Tasks for manual run
 exports.clean = clean
 exports.styles = styles
 exports.scripts = scripts
 exports.img = img
 exports.watch = watch
 
-// Таск, который выполняется по команде gulp
+// Automatic tasks 
 exports.build = gulp.series(clean, gulp.parallel(styles, scripts, img))
 exports.default = gulp.series(clean, gulp.parallel(styles, scripts, img), watch)
